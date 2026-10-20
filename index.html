@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>T182T Performance Calculator</title>
+<meta name="description" content="Offline Cessna T182T NAV III takeoff, climb, and landing performance calculator with live METAR lookup.">
+<meta name="theme-color" content="#0f4c81">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="T182T Perf">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --blue-900:#0a365e;
+    --blue-700:#0f4c81;
+    --blue-500:#1a6bb0;
+    --amber:#ffb81c;
+    --bg:#f4f6f8;
+    --card:#ffffff;
+    --text:#1b2530;
+    --text-dim:#5a6878;
+    --border:#dde3ea;
+    --ok:#1f8a4c;
+    --warn:#b8860b;
+    --danger:#c62828;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.4;
+    padding-bottom:3rem;
+  }
+  .wrap{max-width:560px;margin:0 auto;padding:0 0.9rem;}
+  header.app-header{
+    background:linear-gradient(135deg,var(--blue-700),var(--blue-900));
+    color:#fff;
+    padding:1.1rem 0.9rem 1.4rem;
+    margin-bottom:0.9rem;
+  }
+  header.app-header .wrap{display:flex;align-items:center;gap:0.7rem;}
+  header.app-header img{width:40px;height:40px;border-radius:8px;flex:none;}
+  header.app-header h1{font-size:1.15rem;margin:0;font-weight:700;}
+  header.app-header p{margin:0.15rem 0 0;font-size:0.78rem;opacity:0.85;}
+
+  .disclaimer{
+    background:#fff4d6;
+    border:1px solid #e6c766;
+    color:#6b4e00;
+    font-size:0.76rem;
+    padding:0.55rem 0.7rem;
+    border-radius:var(--radius);
+    margin-bottom:0.9rem;
+  }
+
+  section.card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:0.9rem;
+    margin-bottom:0.9rem;
+  }
+  section.card h2{
+    font-size:0.95rem;
+    margin:0 0 0.7rem;
+    color:var(--blue-700);
+    display:flex;align-items:center;justify-content:space-between;gap:0.5rem;
+  }
+  .field{margin-bottom:0.6rem;}
+  .field:last-child{margin-bottom:0;}
+  .field label{display:block;font-size:0.76rem;color:var(--text-dim);margin-bottom:0.2rem;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.6rem;}
+  input[type=text],input[type=number]{
+    width:100%;
+    padding:0.5rem 0.6rem;
+    border:1px solid var(--border);
+    border-radius:8px;
+    font-size:0.95rem;
+    background:#fbfcfd;
+    color:var(--text);
+  }
+  input:focus{outline:2px solid var(--blue-500);outline-offset:1px;}
+  .checkrow{display:flex;align-items:center;gap:0.45rem;margin-bottom:0.5rem;font-size:0.86rem;}
+  .checkrow:last-child{margin-bottom:0;}
+  .checkrow input{width:17px;height:17px;}
+
+  button{
+    font-family:inherit;
+    cursor:pointer;
+    border:none;
+    border-radius:8px;
+    font-size:0.88rem;
+    font-weight:600;
+    padding:0.55rem 0.9rem;
+  }
+  .btn-primary{background:var(--blue-700);color:#fff;}
+  .btn-primary:active{background:var(--blue-900);}
+  .btn-primary:disabled{background:#9db3c6;cursor:default;}
+  .btn-ghost{background:transparent;color:var(--blue-700);border:1px solid var(--blue-500);font-weight:500;padding:0.35rem 0.6rem;font-size:0.78rem;}
+
+  .status-line{font-size:0.78rem;margin-top:0.55rem;padding:0.45rem 0.55rem;border-radius:8px;}
+  .status-ok{background:#e7f5ec;color:var(--ok);}
+  .status-warn{background:#fdf3de;color:var(--warn);}
+  .status-err{background:#fbe9e7;color:var(--danger);}
+
+  .raw-metar{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:0.72rem;
+    color:var(--text-dim);
+    background:#f0f3f6;
+    border-radius:8px;
+    padding:0.5rem 0.6rem;
+    margin-top:0.55rem;
+    word-break:break-all;
+  }
+
+  .chip-row{display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.5rem;}
+  .chip{
+    background:#eef3f8;color:var(--blue-700);
+    border:1px solid var(--border);
+    border-radius:999px;
+    padding:0.25rem 0.65rem;
+    font-size:0.74rem;
+    cursor:pointer;
+  }
+
+  .result-group{margin-top:0.2rem;}
+  .result-group h2{color:var(--blue-900);}
+  .pa-da-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:0.2rem;}
+  .stat-tile{
+    background:#eef3f8;
+    border-radius:8px;
+    padding:0.6rem 0.7rem;
+    text-align:center;
+  }
+  .stat-tile .label{font-size:0.7rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.03em;}
+  .stat-tile .value{font-size:1.3rem;font-weight:700;color:var(--blue-900);}
+  .stat-tile .sub{font-size:0.68rem;color:var(--text-dim);margin-top:0.1rem;}
+
+  .wind-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;margin-top:0.3rem;}
+
+  .perf-card{
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:0.7rem 0.75rem;
+    margin-top:0.7rem;
+  }
+  .perf-card h3{margin:0 0 0.4rem;font-size:0.88rem;color:var(--blue-700);}
+  .perf-main{display:flex;gap:0.6rem;}
+  .perf-main .tile{flex:1;background:#f7f9fb;border-radius:8px;padding:0.5rem 0.6rem;text-align:center;}
+  .perf-main .tile .n{font-size:1.25rem;font-weight:700;color:var(--blue-900);}
+  .perf-main .tile .l{font-size:0.68rem;color:var(--text-dim);text-transform:uppercase;}
+  details.breakdown{margin-top:0.5rem;font-size:0.76rem;color:var(--text-dim);}
+  details.breakdown summary{cursor:pointer;color:var(--blue-500);font-weight:600;}
+  details.breakdown table{width:100%;border-collapse:collapse;margin-top:0.35rem;}
+  details.breakdown td{padding:0.15rem 0;}
+  details.breakdown td:last-child{text-align:right;font-variant-numeric:tabular-nums;}
+  .clamp-warn{color:var(--warn);font-size:0.74rem;margin-top:0.4rem;}
+
+  footer{text-align:center;font-size:0.7rem;color:var(--text-dim);margin-top:1rem;padding:0 0.9rem;}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="wrap">
+    <img src="icon-192.png" alt="">
+    <div>
+      <h1>T182T Performance Calculator</h1>
+      <p>Cessna T182T NAV III &middot; Short Field Figures (POH Section 5)</p>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="disclaimer">
+    <strong>For training / reference use only.</strong> Always verify every number against the official
+    Pilot's Operating Handbook before making a real go/no-go decision. This app approximates and interpolates
+    published POH charts and makes documented assumptions where the charts are ambiguous &mdash; see each
+    result's "details" for how a number was derived.
+  </div>
+
+  <!-- AIRPORT / WEATHER -->
+  <section class="card" id="weatherCard">
+    <h2>Airport &amp; Weather</h2>
+    <div class="row2">
+      <div class="field">
+        <label for="icaoInput">Airport ICAO code</label>
+        <input type="text" id="icaoInput" placeholder="e.g. KMCI" maxlength="4" autocapitalize="characters" autocomplete="off">
+      </div>
+      <div class="field" style="display:flex;align-items:flex-end;">
+        <button class="btn-primary" id="fetchBtn" style="width:100%;">Get Weather</button>
+      </div>
+    </div>
+    <div id="weatherStatus"></div>
+    <div id="rawMetar" class="raw-metar" style="display:none;"></div>
+    <div id="recentChips" class="chip-row"></div>
+
+    <div style="margin-top:0.8rem;border-top:1px dashed var(--border);padding-top:0.7rem;">
+      <div class="field">
+        <label style="display:flex;justify-content:space-between;">
+          <span>Fields below are editable &mdash; auto-filled by "Get Weather" or enter manually</span>
+        </label>
+      </div>
+      <div class="row3">
+        <div class="field">
+          <label for="tempInput">Temp (&deg;C)</label>
+          <input type="number" id="tempInput" value="15" step="1">
+        </div>
+        <div class="field">
+          <label for="altimInput">Altimeter (inHg)</label>
+          <input type="number" id="altimInput" value="29.92" step="0.01">
+        </div>
+        <div class="field">
+          <label for="elevInput">Field elev (ft)</label>
+          <input type="number" id="elevInput" value="0" step="1">
+        </div>
+      </div>
+      <div class="row3">
+        <div class="field">
+          <label for="wdirInput">Wind dir (&deg; or VRB)</label>
+          <input type="text" id="wdirInput" value="0">
+        </div>
+        <div class="field">
+          <label for="wspdInput">Wind speed (kt)</label>
+          <input type="number" id="wspdInput" value="0" step="1" min="0">
+        </div>
+        <div class="field">
+          <label for="wgstInput">Gust (kt, info only)</label>
+          <input type="number" id="wgstInput" value="" step="1" min="0">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RUNWAY / WIND -->
+  <section class="card">
+    <h2>Runway &amp; Wind Component</h2>
+    <div class="field">
+      <label for="rwyInput">Runway number (e.g. 27, 9, 18L &mdash; heading = number &times;10&deg;)</label>
+      <input type="text" id="rwyInput" placeholder="e.g. 27" value="">
+    </div>
+    <div class="wind-grid">
+      <div class="stat-tile"><div class="label">Headwind</div><div class="value" id="headwindOut">&ndash;</div></div>
+      <div class="stat-tile"><div class="label">Crosswind</div><div class="value" id="crosswindOut">&ndash;</div></div>
+      <div class="stat-tile"><div class="label">Tailwind</div><div class="value" id="tailwindOut">&ndash;</div></div>
+    </div>
+    <div id="windNote" class="status-line status-warn" style="display:none;"></div>
+    <div class="clamp-warn">
+      Note: METAR wind direction is referenced to true north; runway numbers are magnetic headings.
+      No automatic magnetic-variation correction is applied &mdash; treat the component above as approximate.
+    </div>
+  </section>
+
+  <!-- AIRCRAFT / SURFACE -->
+  <section class="card">
+    <h2>Aircraft &amp; Surface</h2>
+    <div class="field">
+      <label for="weightInput">Weight (lbs) &mdash; takeoff chart covers 2300&ndash;3100</label>
+      <input type="number" id="weightInput" value="3100" step="10">
+    </div>
+    <div class="checkrow">
+      <input type="checkbox" id="grassInput">
+      <label for="grassInput">Dry grass runway (takeoff +15% / landing +45% of ground roll)</label>
+    </div>
+    <div class="checkrow">
+      <input type="checkbox" id="flapsUpInput">
+      <label for="flapsUpInput">Landing with flaps UP (approach +10 KIAS, distance +40%)</label>
+    </div>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="card result-group">
+    <h2>Altitude</h2>
+    <div class="pa-da-grid">
+      <div class="stat-tile">
+        <div class="label">Pressure Altitude</div>
+        <div class="value" id="paOut">&ndash;</div>
+        <div class="sub">ft</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Density Altitude</div>
+        <div class="value" id="daOut">&ndash;</div>
+        <div class="sub">ft (approx.)</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card result-group">
+    <h2>Takeoff &mdash; Short Field</h2>
+    <div class="perf-card">
+      <div class="perf-main">
+        <div class="tile"><div class="n" id="toRollOut">&ndash;</div><div class="l">Ground Roll (ft)</div></div>
+        <div class="tile"><div class="n" id="toTotalOut">&ndash;</div><div class="l">Total / 50ft Obst (ft)</div></div>
+      </div>
+      <details class="breakdown" id="toBreakdown"></details>
+      <div class="clamp-warn" id="toClampWarn" style="display:none;"></div>
+    </div>
+  </section>
+
+  <section class="card result-group">
+    <h2>Climb &mdash; Maximum Rate</h2>
+    <div class="perf-card">
+      <div class="perf-main">
+        <div class="tile"><div class="n" id="climbRateOut">&ndash;</div><div class="l">Rate of Climb (fpm)</div></div>
+        <div class="tile"><div class="n" id="climbSpeedOut">&ndash;</div><div class="l">Climb Speed (KIAS)</div></div>
+      </div>
+      <div class="clamp-warn" id="climbClampWarn" style="display:none;"></div>
+      <div class="clamp-warn">Published at 3100 lbs (max gross) only &mdash; lighter aircraft will climb at least this well.</div>
+    </div>
+  </section>
+
+  <section class="card result-group">
+    <h2>Landing &mdash; Short Field</h2>
+    <div class="perf-card">
+      <div class="perf-main">
+        <div class="tile"><div class="n" id="ldRollOut">&ndash;</div><div class="l">Ground Roll (ft)</div></div>
+        <div class="tile"><div class="n" id="ldTotalOut">&ndash;</div><div class="l">Total / 50ft Obst (ft)</div></div>
+      </div>
+      <details class="breakdown" id="ldBreakdown"></details>
+      <div class="clamp-warn" id="ldClampWarn" style="display:none;"></div>
+      <div class="clamp-warn">Published at 2950 lbs only &mdash; lighter landing weights will perform at least this well.</div>
+    </div>
+  </section>
+
+  <footer>
+    Works offline after first visit. Data entered here is saved on this device only (localStorage) &mdash;
+    nothing is sent anywhere except the METAR lookup itself.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   POH CHART DATA (Cessna T182T NAV III, Section 5)
+   ============================================================ */
+
+// Short Field Takeoff Distance, Figure 5-6 (Sheets 1-3)
+const TAKEOFF_PA   = [0,1000,2000,3000,4000,5000,6000,7000,8000];
+const TAKEOFF_TEMP = [0,10,20,30,40];
+const TAKEOFF_TABLES = {
+  2300: [
+    [{r:355,t:660},{r:380,t:700},{r:410,t:745},{r:435,t:790},{r:465,t:835}],
+    [{r:380,t:695},{r:405,t:735},{r:435,t:780},{r:465,t:830},{r:495,t:880}],
+    [{r:400,t:730},{r:430,t:775},{r:460,t:820},{r:490,t:870},{r:525,t:925}],
+    [{r:425,t:765},{r:455,t:815},{r:490,t:865},{r:525,t:915},{r:560,t:970}],
+    [{r:455,t:805},{r:485,t:855},{r:520,t:910},{r:555,t:965},{r:595,t:1025}],
+    [{r:485,t:845},{r:520,t:900},{r:555,t:960},{r:595,t:1020},{r:635,t:1080}],
+    [{r:515,t:895},{r:550,t:950},{r:590,t:1015},{r:630,t:1075},{r:675,t:1145}],
+    [{r:550,t:945},{r:590,t:1005},{r:630,t:1070},{r:675,t:1140},{r:720,t:1210}],
+    [{r:585,t:995},{r:630,t:1065},{r:675,t:1130},{r:720,t:1205},{r:770,t:1280}]
+  ],
+  2700: [
+    [{r:510,t:925},{r:545,t:985},{r:585,t:1050},{r:625,t:1115},{r:665,t:1185}],
+    [{r:540,t:975},{r:580,t:1035},{r:620,t:1100},{r:665,t:1170},{r:710,t:1245}],
+    [{r:575,t:1020},{r:615,t:1090},{r:660,t:1160},{r:705,t:1230},{r:755,t:1310}],
+    [{r:610,t:1075},{r:655,t:1145},{r:700,t:1220},{r:750,t:1300},{r:800,t:1380}],
+    [{r:650,t:1130},{r:695,t:1205},{r:745,t:1285},{r:800,t:1370},{r:850,t:1455}],
+    [{r:690,t:1195},{r:740,t:1275},{r:795,t:1355},{r:850,t:1445},{r:910,t:1540}],
+    [{r:735,t:1260},{r:790,t:1345},{r:845,t:1435},{r:905,t:1530},{r:970,t:1630}],
+    [{r:785,t:1330},{r:845,t:1420},{r:905,t:1520},{r:965,t:1620},{r:1035,t:1725}],
+    [{r:840,t:1410},{r:900,t:1505},{r:965,t:1605},{r:1030,t:1715},{r:1100,t:1825}]
+  ],
+  3100: [
+    [{r:700,t:1255},{r:750,t:1340},{r:800,t:1430},{r:860,t:1525},{r:915,t:1620}],
+    [{r:740,t:1320},{r:795,t:1410},{r:850,t:1505},{r:910,t:1605},{r:975,t:1710}],
+    [{r:785,t:1390},{r:845,t:1485},{r:905,t:1585},{r:965,t:1690},{r:1035,t:1800}],
+    [{r:835,t:1465},{r:895,t:1565},{r:960,t:1670},{r:1030,t:1780},{r:1100,t:1900}],
+    [{r:890,t:1545},{r:955,t:1650},{r:1020,t:1760},{r:1095,t:1880},{r:1170,t:2010}],
+    [{r:945,t:1630},{r:1015,t:1740},{r:1090,t:1865},{r:1165,t:1990},{r:1245,t:2125}],
+    [{r:1010,t:1720},{r:1085,t:1845},{r:1160,t:1975},{r:1245,t:2110},{r:1330,t:2255}],
+    [{r:1075,t:1825},{r:1155,t:1955},{r:1240,t:2090},{r:1325,t:2235},{r:1420,t:2390}],
+    [{r:1145,t:1930},{r:1235,t:2070},{r:1325,t:2215},{r:1415,t:2370},{r:1515,t:2535}]
+  ]
+};
+const TAKEOFF_WEIGHTS = [2300,2700,3100];
+
+// Short Field Landing Distance, Figure 5-12 (2950 lbs only)
+const LANDING_PA   = [0,1000,2000,3000,4000,5000,6000,7000,8000];
+const LANDING_TEMP = [0,10,20,30,40];
+const LANDING_TABLE = [
+  [{r:560,t:1300},{r:580,t:1335},{r:600,t:1365},{r:620,t:1400},{r:640,t:1435}],
+  [{r:580,t:1265},{r:600,t:1365},{r:620,t:1400},{r:645,t:1440},{r:665,t:1475}],
+  [{r:600,t:1370},{r:625,t:1405},{r:645,t:1440},{r:670,t:1480},{r:690,t:1515}],
+  [{r:625,t:1410},{r:645,t:1445},{r:670,t:1485},{r:695,t:1525},{r:715,t:1560}],
+  [{r:650,t:1450},{r:670,t:1485},{r:695,t:1525},{r:720,t:1565},{r:740,t:1600}],
+  [{r:670,t:1485},{r:695,t:1525},{r:720,t:1565},{r:745,t:1610},{r:770,t:1650}],
+  [{r:700,t:1530},{r:725,t:1575},{r:750,t:1615},{r:775,t:1660},{r:800,t:1700}],
+  [{r:725,t:1575},{r:750,t:1615},{r:780,t:1665},{r:805,t:1710},{r:830,t:1750}],
+  [{r:755,t:1625},{r:780,t:1655},{r:810,t:1715},{r:835,t:1760},{r:865,t:1805}]
+];
+
+// Maximum Rate of Climb, Figure 5-7 (3100 lbs only)
+const CLIMB_PA   = [0,2000,4000,6000,8000,10000,12000,14000,16000,18000,20000];
+const CLIMB_TEMP = [-20,0,20,40];
+const CLIMB_KIAS = [84,83,83,82,82,82,81,81,81,80,80];
+const CLIMB_TABLE = [
+  [1165,1095,1020,950],
+  [1125,1050,975,900],
+  [1085,1005,930,850],
+  [1040,960,875,795],
+  [995,910,830,745],
+  [950,865,780,695],
+  [905,815,730,640],
+  [855,760,670,585],
+  [805,715,625,540],
+  [755,665,575,495],
+  [705,610,530,450]
+];
+
+/* ============================================================
+   INTERPOLATION HELPERS
+   ============================================================ */
+
+function bracket(grid, value){
+  if (value <= grid[0]) return {i0:0, i1:0, t:0, clamped: value < grid[0]};
+  const last = grid.length - 1;
+  if (value >= grid[last]) return {i0:last, i1:last, t:0, clamped: value > grid[last]};
+  for (let i=0;i<last;i++){
+    if (value >= grid[i] && value <= grid[i+1]){
+      const t = (value - grid[i]) / (grid[i+1] - grid[i]);
+      return {i0:i, i1:i+1, t, clamped:false};
+    }
+  }
+  return {i0:last, i1:last, t:0, clamped:true};
+}
+
+function interp1D(grid, values, value){
+  const b = bracket(grid, value);
+  const v = values[b.i0] + (values[b.i1] - values[b.i0]) * b.t;
+  return {value: v, clamped: b.clamped};
+}
+
+function bilerp2D(paGrid, tempGrid, matrix, pa, temp){
+  const pb = bracket(paGrid, pa);
+  const tb = bracket(tempGrid, temp);
+  const v00 = matrix[pb.i0][tb.i0];
+  const v01 = matrix[pb.i0][tb.i1];
+  const v10 = matrix[pb.i1][tb.i0];
+  const v11 = matrix[pb.i1][tb.i1];
+  const vp0 = v00 + (v10 - v00) * pb.t;
+  const vp1 = v01 + (v11 - v01) * pb.t;
+  const value = vp0 + (vp1 - vp0) * tb.t;
+  return {value, clamped: pb.clamped || tb.clamped};
+}
+
+function fieldMatrix(table, field){
+  return table.map(row => row.map(cell => cell[field]));
+}
+
+function interpTakeoff(weightLbs, pa, temp){
+  const w = TAKEOFF_WEIGHTS;
+  let w0, w1, wt, weightClamped = false;
+  if (weightLbs <= w[0]) { w0 = w[0]; w1 = w[0]; wt = 0; weightClamped = weightLbs < w[0]; }
+  else if (weightLbs >= w[2]) { w0 = w[2]; w1 = w[2]; wt = 0; weightClamped = weightLbs > w[2]; }
+  else if (weightLbs <= w[1]) { w0 = w[0]; w1 = w[1]; wt = (weightLbs - w[0]) / (w[1] - w[0]); }
+  else { w0 = w[1]; w1 = w[2]; wt = (weightLbs - w[1]) / (w[2] - w[1]); }
+
+  const rollAt = (wv) => bilerp2D(TAKEOFF_PA, TAKEOFF_TEMP, fieldMatrix(TAKEOFF_TABLES[wv],'r'), pa, temp);
+  const totAt  = (wv) => bilerp2D(TAKEOFF_PA, TAKEOFF_TEMP, fieldMatrix(TAKEOFF_TABLES[wv],'t'), pa, temp);
+
+  const roll0 = rollAt(w0), roll1 = rollAt(w1);
+  const tot0  = totAt(w0),  tot1  = totAt(w1);
+
+  const roll = roll0.value + (roll1.value - roll0.value) * wt;
+  const total = tot0.value + (tot1.value - tot0.value) * wt;
+  const clamped = weightClamped || roll0.clamped || roll1.clamped || tot0.clamped || tot1.clamped;
+  return {roll, total, clamped};
+}
+
+function interpLanding(pa, temp){
+  const roll = bilerp2D(LANDING_PA, LANDING_TEMP, fieldMatrix(LANDING_TABLE,'r'), pa, temp);
+  const total = bilerp2D(LANDING_PA, LANDING_TEMP, fieldMatrix(LANDING_TABLE,'t'), pa, temp);
+  return {roll: roll.value, total: total.value, clamped: roll.clamped || total.clamped};
+}
+
+function interpClimb(pa, temp){
+  const rate = bilerp2D(CLIMB_PA, CLIMB_TEMP, CLIMB_TABLE, pa, temp);
+  const speed = interp1D(CLIMB_PA, CLIMB_KIAS, pa);
+  return {rate: rate.value, speed: speed.value, clamped: rate.clamped || speed.clamped};
+}
+
+/* ============================================================
+   CORE FORMULAS
+   ============================================================ */
+
+function pressureAltitude(elevFt, altimInHg){
+  return elevFt + (29.92 - altimInHg) * 1000;
+}
+
+function isaTemp(pa){
+  return 15 - 2 * (pa / 1000);
+}
+
+function densityAltitude(pa, oatC){
+  return pa + 120 * (oatC - isaTemp(pa));
+}
+
+function windComponents(runwayHeadingDeg, wdirRaw, windSpeedKt){
+  if (wdirRaw === 'VRB' || wdirRaw === '' || wdirRaw === null || wdirRaw === undefined ||
+      !isFinite(windSpeedKt) || windSpeedKt <= 0){
+    return {headwind:0, crosswind:0, variable: wdirRaw === 'VRB', calm: !windSpeedKt};
+  }
+  let angle = runwayHeadingDeg - Number(wdirRaw);
+  angle = ((angle + 180) % 360 + 360) % 360 - 180;
+  const rad = angle * Math.PI / 180;
+  return {
+    headwind: windSpeedKt * Math.cos(rad),
+    crosswind: windSpeedKt * Math.sin(rad),
+    variable:false, calm:false
+  };
+}
+
+const MAX_HEADWIND_REDUCTION = 0.80; // safety floor: never reduce published distance below 20% of base
+const MAX_TAILWIND_KT = 10;          // chart only defines tailwind credit penalty up to 10kt
+
+function windCorrectionFactor(headwindKt){
+  if (headwindKt >= 0){
+    const pct = Math.min((headwindKt / 9) * 0.10, MAX_HEADWIND_REDUCTION);
+    return {factor: 1 - pct, capped: (headwindKt / 9) * 0.10 > MAX_HEADWIND_REDUCTION};
+  } else {
+    const tail = Math.min(-headwindKt, MAX_TAILWIND_KT);
+    const pct = (tail / 2) * 0.10;
+    return {factor: 1 + pct, capped: -headwindKt > MAX_TAILWIND_KT};
+  }
+}
+
+// Applies the documented correction pipeline: base -> wind -> grass (additive, off ground roll) -> [flaps-up, landing only] -> ceil
+function correctDistance(base, headwindKt, grassOn, grassPctOfRoll, flapsUpOn){
+  const steps = [];
+  steps.push({label:'Published chart value', roll: base.roll, total: base.total});
+
+  const wind = windCorrectionFactor(headwindKt);
+  let roll = base.roll * wind.factor;
+  let total = base.total * wind.factor;
+  steps.push({label: headwindKt >= 0 ? 'After headwind correction' : 'After tailwind correction', roll, total});
+
+  if (grassOn){
+    const delta = roll * grassPctOfRoll;
+    roll += delta;
+    total += delta;
+    steps.push({label:'After dry grass surface (+' + Math.round(grassPctOfRoll*100) + '% of roll)', roll, total});
+  }
+
+  if (flapsUpOn){
+    roll *= 1.40;
+    total *= 1.40;
+    steps.push({label:'After flaps-up landing penalty (+40%)', roll, total});
+  }
+
+  roll = Math.ceil(roll);
+  total = Math.ceil(total);
+  steps.push({label:'Final (rounded up)', roll, total});
+
+  return {roll, total, steps, windCapped: wind.capped};
+}
+
+/* ============================================================
+   localStorage PERSISTENCE
+   ============================================================ */
+
+const LS_PREFIX = 't182t:';
+const SCHEMA_VERSION = 1;
+
+function lsGet(key){
+  try { return JSON.parse(localStorage.getItem(LS_PREFIX + key)); }
+  catch(e){ return null; }
+}
+function lsSet(key, value){
+  try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); }
+  catch(e){ /* storage unavailable or full - fail silently, app still works this session */ }
+}
+
+function saveInputs(){
+  lsSet('lastInputs', {
+    schemaVersion: SCHEMA_VERSION,
+    airport: els.icao.value.trim().toUpperCase(),
+    temp: els.temp.value,
+    altim: els.altim.value,
+    elev: els.elev.value,
+    wdir: els.wdir.value,
+    wspd: els.wspd.value,
+    wgst: els.wgst.value,
+    runway: els.rwy.value,
+    weight: els.weight.value,
+    grass: els.grass.checked,
+    flapsUp: els.flapsUp.checked,
+    timestamp: Date.now()
+  });
+}
+
+function loadInputs(){
+  const saved = lsGet('lastInputs');
+  if (!saved) return;
+  if (saved.airport) els.icao.value = saved.airport;
+  if (saved.temp !== undefined) els.temp.value = saved.temp;
+  if (saved.altim !== undefined) els.altim.value = saved.altim;
+  if (saved.elev !== undefined) els.elev.value = saved.elev;
+  if (saved.wdir !== undefined) els.wdir.value = saved.wdir;
+  if (saved.wspd !== undefined) els.wspd.value = saved.wspd;
+  if (saved.wgst !== undefined) els.wgst.value = saved.wgst;
+  if (saved.runway !== undefined) els.rwy.value = saved.runway;
+  if (saved.weight !== undefined) els.weight.value = saved.weight;
+  if (saved.grass !== undefined) els.grass.checked = saved.grass;
+  if (saved.flapsUp !== undefined) els.flapsUp.checked = saved.flapsUp;
+}
+
+function saveMetarCache(icao, metar){
+  lsSet('metar:' + icao, {schemaVersion: SCHEMA_VERSION, fetchedAt: Date.now(), metar});
+  const recent = lsGet('recentAirports') || [];
+  const next = [icao, ...recent.filter(a => a !== icao)].slice(0, 6);
+  lsSet('recentAirports', next);
+  renderRecentChips();
+}
+
+function loadMetarCache(icao){
+  return lsGet('metar:' + icao);
+}
+
+function renderRecentChips(){
+  const recent = lsGet('recentAirports') || [];
+  els.recentChips.innerHTML = '';
+  recent.forEach(icao => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = icao;
+    chip.addEventListener('click', () => { els.icao.value = icao; fetchWeather(); });
+    els.recentChips.appendChild(chip);
+  });
+}
+
+/* ============================================================
+   METAR FETCH
+   ============================================================ */
+
+function relativeTime(ts){
+  const mins = Math.round((Date.now() - ts) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + ' min ago';
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return hrs + ' hr ago';
+  return Math.round(hrs / 24) + ' day(s) ago';
+}
+
+// Tried in order; the first one that answers wins. Public CORS relays come and go (several were
+// found down during testing), so we don't rely on a single one - each gets its own short timeout
+// before falling through to the next, and only after all of them fail do we fall back to the
+// cached/manual-entry path in fetchWeather().
+function corsProxyUrls(targetUrl){
+  return [
+    'https://proxy.corsfix.com/?' + targetUrl,
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(targetUrl)
+  ];
+}
+
+async function fetchMetarRaw(icao){
+  const target = 'https://aviationweather.gov/api/data/metar?ids=' + encodeURIComponent(icao) + '&format=json';
+  const proxies = corsProxyUrls(target);
+  let lastErr = null;
+  for (const proxied of proxies){
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 7000);
+    try {
+      const res = await fetch(proxied, {signal: controller.signal});
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) throw new Error('No METAR for that station');
+      return data[0];
+    } catch (err){
+      lastErr = err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr || new Error('All weather relays failed');
+}
+
+function applyMetarToFields(metar){
+  if (typeof metar.temp === 'number') els.temp.value = metar.temp;
+  if (typeof metar.altim === 'number') els.altim.value = (metar.altim / 33.8639).toFixed(2);
+  if (typeof metar.elev === 'number') els.elev.value = Math.round(metar.elev * 3.28084);
+  if (metar.wdir !== undefined && metar.wdir !== null) els.wdir.value = metar.wdir;
+  if (typeof metar.wspd === 'number') els.wspd.value = metar.wspd;
+  els.wgst.value = (typeof metar.wgst === 'number') ? metar.wgst : '';
+}
+
+function setStatus(message, kind){
+  els.weatherStatus.innerHTML = '<div class="status-line status-' + kind + '">' + message + '</div>';
+}
+
+async function fetchWeather(){
+  const icao = els.icao.value.trim().toUpperCase();
+  if (!icao){ setStatus('Enter an airport ICAO code first.', 'err'); return; }
+  els.icao.value = icao;
+  els.fetchBtn.disabled = true;
+  els.fetchBtn.textContent = 'Fetching…';
+  setStatus('Contacting aviationweather.gov…', 'warn');
+  els.rawMetar.style.display = 'none';
+
+  try {
+    const metar = await fetchMetarRaw(icao);
+    applyMetarToFields(metar);
+    saveMetarCache(icao, metar);
+    setStatus('Live METAR loaded for ' + (metar.name || icao) + ' &mdash; just now.', 'ok');
+    if (metar.rawOb){
+      els.rawMetar.textContent = metar.rawOb;
+      els.rawMetar.style.display = 'block';
+    }
+  } catch (err){
+    const cached = loadMetarCache(icao);
+    if (cached && cached.metar){
+      applyMetarToFields(cached.metar);
+      setStatus('Could not reach live weather (offline or lookup failed). Using cached METAR for ' + icao +
+                 ' from ' + relativeTime(cached.fetchedAt) + '.', 'warn');
+      if (cached.metar.rawOb){
+        els.rawMetar.textContent = cached.metar.rawOb;
+        els.rawMetar.style.display = 'block';
+      }
+    } else {
+      setStatus('Could not fetch live weather for ' + icao + ' (' + err.message +
+                 '). Enter temperature, altimeter, elevation and wind manually below.', 'err');
+    }
+  } finally {
+    els.fetchBtn.disabled = false;
+    els.fetchBtn.textContent = 'Get Weather';
+    recalc();
+  }
+}
+
+/* ============================================================
+   UI WIRING / RECALCULATION
+   ============================================================ */
+
+const els = {};
+['icaoInput','tempInput','altimInput','elevInput','wdirInput','wspdInput','wgstInput',
+ 'rwyInput','weightInput','grassInput','flapsUpInput',
+ 'fetchBtn','weatherStatus','rawMetar','recentChips',
+ 'headwindOut','crosswindOut','tailwindOut','windNote',
+ 'paOut','daOut',
+ 'toRollOut','toTotalOut','toBreakdown','toClampWarn',
+ 'climbRateOut','climbSpeedOut','climbClampWarn',
+ 'ldRollOut','ldTotalOut','ldBreakdown','ldClampWarn'
+].forEach(id => els[id] = document.getElementById(id));
+
+// shorthand aliases used by persistence functions above
+els.icao = els.icaoInput; els.temp = els.tempInput; els.altim = els.altimInput;
+els.elev = els.elevInput; els.wdir = els.wdirInput; els.wspd = els.wspdInput;
+els.wgst = els.wgstInput; els.rwy = els.rwyInput; els.weight = els.weightInput;
+els.grass = els.grassInput; els.flapsUp = els.flapsUpInput;
+
+function num(el, fallback){
+  const v = parseFloat(el.value);
+  return isFinite(v) ? v : fallback;
+}
+
+function fmt(n){ return Math.round(n).toLocaleString(); }
+
+function renderBreakdown(el, result){
+  let html = '<summary>How this was calculated</summary><table>';
+  result.steps.forEach(s => {
+    html += '<tr><td>' + s.label + '</td><td>' + fmt(s.roll) + ' / ' + fmt(s.total) + ' ft</td></tr>';
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+function recalc(){
+  const elevFt = num(els.elev, 0);
+  const altimInHg = num(els.altim, 29.92);
+  const oatC = num(els.temp, 15);
+  const weightLbs = num(els.weight, 3100);
+  const wspd = num(els.wspd, 0);
+  const wdirRaw = els.wdir.value.trim().toUpperCase() === 'VRB' ? 'VRB' : els.wdir.value.trim();
+  const rwyNum = parseFloat(els.rwy.value);
+
+  const pa = pressureAltitude(elevFt, altimInHg);
+  const da = densityAltitude(pa, oatC);
+  els.paOut.textContent = fmt(pa);
+  els.daOut.textContent = fmt(da);
+
+  // Wind component
+  let headwind = 0;
+  if (isFinite(rwyNum)){
+    const rwyHeading = rwyNum * 10;
+    const w = windComponents(rwyHeading, wdirRaw, wspd);
+    headwind = w.headwind;
+    els.headwindOut.textContent = (w.headwind >= 0 ? fmt(w.headwind) : '0') + ' kt';
+    els.tailwindOut.textContent = (w.headwind < 0 ? fmt(-w.headwind) : '0') + ' kt';
+    els.crosswindOut.textContent = fmt(Math.abs(w.crosswind)) + ' kt';
+    if (w.variable){
+      els.windNote.style.display = 'block';
+      els.windNote.textContent = 'Wind reported as variable (VRB) — no headwind/tailwind credit applied.';
+    } else if (w.calm){
+      els.windNote.style.display = 'block';
+      els.windNote.textContent = 'Calm or no wind entered — no correction applied.';
+    } else {
+      els.windNote.style.display = 'none';
+    }
+  } else {
+    els.headwindOut.textContent = '–';
+    els.crosswindOut.textContent = '–';
+    els.tailwindOut.textContent = '–';
+    els.windNote.style.display = 'block';
+    els.windNote.textContent = 'Enter a runway number above to compute wind components.';
+  }
+
+  // Takeoff
+  const toBase = interpTakeoff(weightLbs, pa, oatC);
+  const toResult = correctDistance(toBase, headwind, els.grass.checked, 0.15, false);
+  els.toRollOut.textContent = fmt(toResult.roll);
+  els.toTotalOut.textContent = fmt(toResult.total);
+  renderBreakdown(els.toBreakdown, toResult);
+  const toWarnings = [];
+  if (toBase.clamped) toWarnings.push('Weight, pressure altitude, or temperature is outside the published chart range — value clamped to the nearest chart boundary, not extrapolated.');
+  if (toResult.windCapped) toWarnings.push('Wind benefit/penalty capped for safety — the POH chart does not define credit beyond its stated range.');
+  els.toClampWarn.style.display = toWarnings.length ? 'block' : 'none';
+  els.toClampWarn.textContent = toWarnings.join(' ');
+
+  // Climb
+  const climb = interpClimb(pa, oatC);
+  els.climbRateOut.textContent = fmt(climb.rate);
+  els.climbSpeedOut.textContent = Math.round(climb.speed);
+  els.climbClampWarn.style.display = climb.clamped ? 'block' : 'none';
+  els.climbClampWarn.textContent = climb.clamped ? 'Pressure altitude or temperature is outside the published chart range — value clamped to the nearest chart boundary.' : '';
+
+  // Landing
+  const ldBase = interpLanding(pa, oatC);
+  const ldResult = correctDistance(ldBase, headwind, els.grass.checked, 0.45, els.flapsUp.checked);
+  els.ldRollOut.textContent = fmt(ldResult.roll);
+  els.ldTotalOut.textContent = fmt(ldResult.total);
+  renderBreakdown(els.ldBreakdown, ldResult);
+  const ldWarnings = [];
+  if (ldBase.clamped) ldWarnings.push('Pressure altitude or temperature is outside the published chart range — value clamped to the nearest chart boundary, not extrapolated.');
+  if (ldResult.windCapped) ldWarnings.push('Wind benefit/penalty capped for safety — the POH chart does not define credit beyond its stated range.');
+  els.ldClampWarn.style.display = ldWarnings.length ? 'block' : 'none';
+  els.ldClampWarn.textContent = ldWarnings.join(' ');
+
+  saveInputs();
+}
+
+function init(){
+  loadInputs();
+  renderRecentChips();
+  els.fetchBtn.addEventListener('click', fetchWeather);
+  const watched = [els.temp, els.altim, els.elev, els.wdir, els.wspd, els.wgst,
+                   els.rwy, els.weight, els.grass, els.flapsUp, els.icao];
+  watched.forEach(el => el.addEventListener('input', recalc));
+  watched.forEach(el => el.addEventListener('change', recalc));
+  recalc();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+if ('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(() => {
+      // offline install not available (e.g. plain HTTP) - app still works online
+    });
+  });
+}
+
+})();
+</script>
+</body>
+</html>
