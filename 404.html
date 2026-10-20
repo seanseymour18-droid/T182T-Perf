@@ -212,6 +212,12 @@
       </div>
       <div class="row3">
         <div class="field">
+          <label for="dewpInput">Dewpoint (&deg;C)</label>
+          <input type="number" id="dewpInput" value="" step="1">
+        </div>
+      </div>
+      <div class="row3">
+        <div class="field">
           <label for="tempInput">Temp (&deg;C)</label>
           <input type="number" id="tempInput" value="15" step="1">
         </div>
@@ -290,6 +296,11 @@
         <div class="label">Density Altitude</div>
         <div class="value" id="daOut">&ndash;</div>
         <div class="sub">ft (approx.)</div>
+      </div>
+      <div class="stat-tile" style="grid-column:1/-1">
+        <div class="label">DA, humidity-corrected</div>
+        <div class="value" id="daHumOut">&ndash;</div>
+        <div class="sub">ft (matches ForeFlight)</div>
       </div>
     </div>
   </section>
@@ -507,6 +518,16 @@ function densityAltitude(pa, oatC){
   return pa + 120 * (oatC - isaTemp(pa));
 }
 
+// Actual-air-density altitude including water vapor (needs dewpoint). Moist air is less dense,
+// so this reads higher than the dry-air rule-of-thumb above; ForeFlight reports this basis.
+function densityAltitudeHumid(elevFt, altimInHg, oatC, dewpC){
+  const stationHpa = altimInHg * 33.8639 * Math.pow(1 - 0.0000068753 * elevFt, 5.2559);
+  const eHpa = 6.112 * Math.exp(17.62 * dewpC / (243.12 + dewpC));
+  const tK = oatC + 273.15;
+  const rho = ((stationHpa - eHpa) * 100) / (287.05 * tK) + (eHpa * 100) / (461.5 * tK);
+  return 3.28084 * 44330.77 * (1 - Math.pow(rho / 1.225, 0.234969));
+}
+
 function windComponents(runwayHeadingDeg, wdirRaw, windSpeedKt){
   if (wdirRaw === 'VRB' || wdirRaw === '' || wdirRaw === null || wdirRaw === undefined ||
       !isFinite(windSpeedKt) || windSpeedKt <= 0){
@@ -587,6 +608,7 @@ function saveInputs(){
     schemaVersion: SCHEMA_VERSION,
     airport: els.icao.value.trim().toUpperCase(),
     temp: els.temp.value,
+    dewp: els.dewp.value,
     altim: els.altim.value,
     elev: els.elev.value,
     wdir: els.wdir.value,
@@ -605,6 +627,7 @@ function loadInputs(){
   if (!saved) return;
   if (saved.airport) els.icao.value = saved.airport;
   if (saved.temp !== undefined) els.temp.value = saved.temp;
+  if (saved.dewp !== undefined) els.dewp.value = saved.dewp;
   if (saved.altim !== undefined) els.altim.value = saved.altim;
   if (saved.elev !== undefined) els.elev.value = saved.elev;
   if (saved.wdir !== undefined) els.wdir.value = saved.wdir;
@@ -675,6 +698,7 @@ async function fetchMetarRaw(icao){
 
 function applyMetarToFields(metar){
   if (typeof metar.temp === 'number') els.temp.value = metar.temp;
+  els.dewp.value = (typeof metar.dewp === 'number') ? metar.dewp : '';
   if (typeof metar.altim === 'number') els.altim.value = (metar.altim / 33.8639).toFixed(2);
   if (typeof metar.elev === 'number') els.elev.value = Math.round(metar.elev * 3.28084);
   if (metar.wdir !== undefined && metar.wdir !== null) els.wdir.value = metar.wdir;
@@ -730,18 +754,18 @@ async function fetchWeather(){
    ============================================================ */
 
 const els = {};
-['icaoInput','tempInput','altimInput','elevInput','wdirInput','wspdInput','wgstInput',
+['icaoInput','tempInput','dewpInput','altimInput','elevInput','wdirInput','wspdInput','wgstInput',
  'rwyInput','weightInput','grassInput','flapsUpInput',
  'fetchBtn','weatherStatus','rawMetar','recentChips',
  'headwindOut','crosswindOut','tailwindOut','windNote',
- 'paOut','daOut',
+ 'paOut','daOut','daHumOut',
  'toRollOut','toTotalOut','toBreakdown','toClampWarn',
  'climbRateOut','climbSpeedOut','climbClampWarn',
  'ldRollOut','ldTotalOut','ldBreakdown','ldClampWarn'
 ].forEach(id => els[id] = document.getElementById(id));
 
 // shorthand aliases used by persistence functions above
-els.icao = els.icaoInput; els.temp = els.tempInput; els.altim = els.altimInput;
+els.icao = els.icaoInput; els.temp = els.tempInput; els.dewp = els.dewpInput; els.altim = els.altimInput;
 els.elev = els.elevInput; els.wdir = els.wdirInput; els.wspd = els.wspdInput;
 els.wgst = els.wgstInput; els.rwy = els.rwyInput; els.weight = els.weightInput;
 els.grass = els.grassInput; els.flapsUp = els.flapsUpInput;
@@ -775,6 +799,8 @@ function recalc(){
   const da = densityAltitude(pa, oatC);
   els.paOut.textContent = fmt(pa);
   els.daOut.textContent = fmt(da);
+  const dewpC = parseFloat(els.dewp.value);
+  els.daHumOut.textContent = isFinite(dewpC) ? fmt(densityAltitudeHumid(elevFt, altimInHg, oatC, dewpC)) : '–';
 
   // Wind component
   let headwind = 0;
@@ -840,7 +866,7 @@ function init(){
   loadInputs();
   renderRecentChips();
   els.fetchBtn.addEventListener('click', fetchWeather);
-  const watched = [els.temp, els.altim, els.elev, els.wdir, els.wspd, els.wgst,
+  const watched = [els.temp, els.dewp, els.altim, els.elev, els.wdir, els.wspd, els.wgst,
                    els.rwy, els.weight, els.grass, els.flapsUp, els.icao];
   watched.forEach(el => el.addEventListener('input', recalc));
   watched.forEach(el => el.addEventListener('change', recalc));

@@ -2,7 +2,7 @@
 // http://localhost - if you drop these files on a plain-HTTP server, the browser will silently
 // skip registration and the app will behave like a normal online-only page.
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `t182t-shell-${CACHE_VERSION}`;
 
 const SHELL_ASSETS = [
