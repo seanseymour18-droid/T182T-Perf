@@ -653,37 +653,24 @@ function relativeTime(ts){
   return Math.round(hrs / 24) + ' day(s) ago';
 }
 
-// Tried in order; the first one that answers wins. Public CORS relays come and go (several were
-// found down during testing), so we don't rely on a single one - each gets its own short timeout
-// before falling through to the next, and only after all of them fail do we fall back to the
-// cached/manual-entry path in fetchWeather().
-function corsProxyUrls(targetUrl){
-  return [
-    'https://proxy.corsfix.com/?' + targetUrl,
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(targetUrl)
-  ];
-}
+// aviationweather.gov itself has no CORS headers, so a dedicated Cloudflare Worker relays the
+// request and adds Access-Control-Allow-Origin: *. The Worker only forwards to aviationweather.gov
+// (enforced server-side) - it is not an open proxy. Source: metar-proxy-worker/worker.js.
+const METAR_PROXY = 'https://t182t-metar-proxy.seanseymour18.workers.dev/?url=';
 
 async function fetchMetarRaw(icao){
   const target = 'https://aviationweather.gov/api/data/metar?ids=' + encodeURIComponent(icao) + '&format=json';
-  const proxies = corsProxyUrls(target);
-  let lastErr = null;
-  for (const proxied of proxies){
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 7000);
-    try {
-      const res = await fetch(proxied, {signal: controller.signal});
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      if (!Array.isArray(data) || data.length === 0) throw new Error('No METAR for that station');
-      return data[0];
-    } catch (err){
-      lastErr = err;
-    } finally {
-      clearTimeout(timer);
-    }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(METAR_PROXY + encodeURIComponent(target), {signal: controller.signal});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) throw new Error('No METAR for that station');
+    return data[0];
+  } finally {
+    clearTimeout(timer);
   }
-  throw lastErr || new Error('All weather relays failed');
 }
 
 function applyMetarToFields(metar){

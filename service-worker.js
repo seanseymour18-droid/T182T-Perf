@@ -2,7 +2,7 @@
 // http://localhost - if you drop these files on a plain-HTTP server, the browser will silently
 // skip registration and the app will behave like a normal online-only page.
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `t182t-shell-${CACHE_VERSION}`;
 
 const SHELL_ASSETS = [
@@ -16,7 +16,7 @@ const SHELL_ASSETS = [
 // Hosts whose requests must always go straight to the network - live METAR data must never
 // be served from the app-shell cache or it could get stuck stale forever. Offline/stale
 // handling for weather is done in index.html via localStorage, not here.
-const BYPASS_HOSTS = ['aviationweather.gov', 'allorigins.win', 'corsfix.com'];
+const BYPASS_HOSTS = ['aviationweather.gov', 'workers.dev'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
