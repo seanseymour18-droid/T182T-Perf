@@ -1,25 +1,18 @@
 {
-  "name": "T182T Performance Calculator",
+  "name": "T182T Performance",
   "short_name": "T182T Perf",
-  "description": "Offline Cessna T182T NAV III takeoff, climb, and landing performance calculator with live METAR lookup.",
+  "description": "Cessna T182T takeoff, climb, and landing performance from live airport weather.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait-primary",
-  "background_color": "#0f4c81",
-  "theme_color": "#0f4c81",
+  "background_color": "#e7eef4",
+  "theme_color": "#0b3a5b",
   "icons": [
     {
       "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
-    },
-    {
-      "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
     },
     {
       "src": "icon-512.png",
