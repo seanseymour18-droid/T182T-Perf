@@ -384,6 +384,14 @@
       return null;
     }
 
+    /* POH charts start at sea level. High altimeter settings make pressure
+       altitude slightly negative; use the sea-level line rather than blocking. */
+    function chartPressureAlt(pressureAlt, alts) {
+      if (pressureAlt > alts[alts.length - 1]) return null;
+      if (pressureAlt < alts[0]) return alts[0];
+      return pressureAlt;
+    }
+
     function blend(locateResult, read) {
       if (!locateResult) return { outside: true, value: null };
       const near = read(locateResult.index);
@@ -490,7 +498,11 @@
       const wind = resolveWind(input);
       result.wind = wind;
 
-      const takeoffOutside = pressureAlt < DIST_ALTS[0] || pressureAlt > DIST_ALTS[DIST_ALTS.length - 1]
+      const distChartAlt = chartPressureAlt(pressureAlt, DIST_ALTS);
+      const climbChartAlt = chartPressureAlt(pressureAlt, CLIMB_ALTS);
+      const belowSeaLevel = pressureAlt < 0;
+      const seaLevelNote = "Pressure altitude is below sea level; chart values are from the sea-level line.";
+      const takeoffOutside = distChartAlt == null
         || input.oatC < DIST_TEMPS[0] || input.oatC > DIST_TEMPS[DIST_TEMPS.length - 1];
       const weightMissing = input.weightLb == null;
       const weightOutside = !weightMissing && (input.weightLb < WEIGHTS[0] || input.weightLb > WEIGHTS[WEIGHTS.length - 1]);
@@ -503,14 +515,16 @@
         result.takeoff.reason = "Takeoff chart covers sea level to 8,000 ft pressure altitude and 0 to 40°C.";
       } else {
         const ground = sampleWeight(input.weightLb, (weight) => sampleGrid(
-          TAKEOFF[weight], DIST_ALTS, DIST_TEMPS, pressureAlt, input.oatC, (cell) => cell[0]
+          TAKEOFF[weight], DIST_ALTS, DIST_TEMPS, distChartAlt, input.oatC, (cell) => cell[0]
         ).value);
         const total = sampleWeight(input.weightLb, (weight) => sampleGrid(
-          TAKEOFF[weight], DIST_ALTS, DIST_TEMPS, pressureAlt, input.oatC, (cell) => cell[1]
+          TAKEOFF[weight], DIST_ALTS, DIST_TEMPS, distChartAlt, input.oatC, (cell) => cell[1]
         ).value);
         const liftoff = sampleWeight(input.weightLb, (weight) => TAKEOFF_SPEED[weight][0]);
         const over50 = sampleWeight(input.weightLb, (weight) => TAKEOFF_SPEED[weight][1]);
         const corrected = correctDistance(ground.value, total.value, wind.factor, input.surface, "takeoff", false, wind.tailwindLimit);
+        const takeoffNotes = corrected.notes.slice();
+        if (belowSeaLevel) takeoffNotes.unshift(seaLevelNote);
         result.takeoff = {
           available: true,
           reason: null,
@@ -518,21 +532,22 @@
           total: corrected.total,
           liftoff: Math.round(liftoff.value),
           over50: Math.round(over50.value),
-          notes: corrected.notes
+          notes: takeoffNotes
         };
       }
 
-      const climbOutside = pressureAlt < CLIMB_ALTS[0] || pressureAlt > CLIMB_ALTS[CLIMB_ALTS.length - 1]
+      const climbOutside = climbChartAlt == null
         || input.oatC < CLIMB_TEMPS[0] || input.oatC > CLIMB_TEMPS[CLIMB_TEMPS.length - 1];
       if (climbOutside) {
         result.climb.reason = "Climb chart covers sea level to 20,000 ft pressure altitude and -20 to 40°C.";
       } else {
-        const rateValue = climbRate(pressureAlt, input.oatC);
-        const speedValue = climbSpeed(pressureAlt, input.oatC);
+        const rateValue = climbRate(climbChartAlt, input.oatC);
+        const speedValue = climbSpeed(climbChartAlt, input.oatC);
         const climbNotes = [
           "Published at 3,100 lb" + (input.weightLb != null && input.weightLb !== 3100 ? ". Not adjusted for the entered weight." : "."),
           "Flaps up, 2400 RPM, 32 in Hg, mixture 24 GPH, cowl flaps open."
         ];
+        if (belowSeaLevel) climbNotes.unshift(seaLevelNote);
         if (rateValue == null) {
           result.climb = {
             available: false,
@@ -555,10 +570,11 @@
       if (takeoffOutside) {
         result.landing.reason = "Landing chart covers sea level to 8,000 ft pressure altitude and 0 to 40°C.";
       } else {
-        const ground = sampleGrid(LANDING, DIST_ALTS, DIST_TEMPS, pressureAlt, input.oatC, (cell) => cell[0]);
-        const total = sampleGrid(LANDING, DIST_ALTS, DIST_TEMPS, pressureAlt, input.oatC, (cell) => cell[1]);
+        const ground = sampleGrid(LANDING, DIST_ALTS, DIST_TEMPS, distChartAlt, input.oatC, (cell) => cell[0]);
+        const total = sampleGrid(LANDING, DIST_ALTS, DIST_TEMPS, distChartAlt, input.oatC, (cell) => cell[1]);
         const corrected = correctDistance(ground.value, total.value, wind.factor, input.surface, "landing", input.flapsUp, wind.tailwindLimit);
         const notes = corrected.notes.slice();
+        if (belowSeaLevel) notes.unshift(seaLevelNote);
         notes.unshift("Published at 2,950 lb" + (input.weightLb != null && input.weightLb !== 2950 ? ". Not adjusted for the entered weight." : "."));
         if (!input.flapsUp) notes.push("Flaps full, 60 KIAS at 50 ft.");
         result.landing = {
@@ -722,6 +738,18 @@
 
       result = performance(Object.assign({}, base, { elevationFt: 680, altimeterInHg: 30.2 }));
       expect("pa high", result.pressureAlt, 400);
+
+      /* High altimeter at a low field → negative PA; still use sea-level chart. */
+      result = performance(Object.assign({}, base, { elevationFt: 0, altimeterInHg: 29.991, oatC: 15 }));
+      expect("neg pa", result.pressureAlt, -71);
+      expect("neg pa to available", result.takeoff.available, true);
+      expect("neg pa to ground", result.takeoff.ground, 775);
+      expect("neg pa to total", result.takeoff.total, 1385);
+      expect("neg pa climb", result.climb.fpm, 1040);
+      expect("neg pa kias", result.climb.kias, 84);
+      expect("neg pa ld ground", result.landing.ground, 590);
+      expect("neg pa ld total", result.landing.total, 1350);
+      expect("neg pa note", result.takeoff.notes[0], "Pressure altitude is below sea level; chart values are from the sea-level line.");
 
       result = performance(Object.assign({}, base, { elevationFt: 500, oatC: 5 }));
       expect("mid ground", result.takeoff.ground, 745);
