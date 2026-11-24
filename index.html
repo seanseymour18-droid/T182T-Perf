@@ -384,12 +384,13 @@
       return null;
     }
 
-    /* POH charts start at sea level. High altimeter settings make pressure
-       altitude slightly negative; use the sea-level line rather than blocking. */
-    function chartPressureAlt(pressureAlt, alts) {
-      if (pressureAlt > alts[alts.length - 1]) return null;
-      if (pressureAlt < alts[0]) return alts[0];
-      return pressureAlt;
+    /* POH charts publish a lowest altitude/temperature line. Values below that
+       (negative PA in high pressure, or OAT colder than the chart) use the
+       published minimum line rather than blocking. Above the top is still out. */
+    function clampChart(value, grid) {
+      if (value > grid[grid.length - 1]) return null;
+      if (value < grid[0]) return grid[0];
+      return value;
     }
 
     function blend(locateResult, read) {
@@ -498,12 +499,17 @@
       const wind = resolveWind(input);
       result.wind = wind;
 
-      const distChartAlt = chartPressureAlt(pressureAlt, DIST_ALTS);
-      const climbChartAlt = chartPressureAlt(pressureAlt, CLIMB_ALTS);
-      const belowSeaLevel = pressureAlt < 0;
+      const distChartAlt = clampChart(pressureAlt, DIST_ALTS);
+      const distChartTemp = clampChart(input.oatC, DIST_TEMPS);
+      const climbChartAlt = clampChart(pressureAlt, CLIMB_ALTS);
+      const climbChartTemp = clampChart(input.oatC, CLIMB_TEMPS);
+      const belowSeaLevel = pressureAlt < DIST_ALTS[0];
+      const belowDistTemp = input.oatC < DIST_TEMPS[0];
+      const belowClimbTemp = input.oatC < CLIMB_TEMPS[0];
       const seaLevelNote = "Pressure altitude is below sea level; chart values are from the sea-level line.";
-      const takeoffOutside = distChartAlt == null
-        || input.oatC < DIST_TEMPS[0] || input.oatC > DIST_TEMPS[DIST_TEMPS.length - 1];
+      const coldDistNote = "Temperature is below 0°C; distances use the 0°C chart line.";
+      const coldClimbNote = "Temperature is below -20°C; climb uses the -20°C chart line.";
+      const distOutside = distChartAlt == null || distChartTemp == null;
       const weightMissing = input.weightLb == null;
       const weightOutside = !weightMissing && (input.weightLb < WEIGHTS[0] || input.weightLb > WEIGHTS[WEIGHTS.length - 1]);
 
@@ -511,19 +517,20 @@
         result.takeoff.reason = "Enter the airplane weight.";
       } else if (weightOutside) {
         result.takeoff.reason = "Takeoff charts cover 2,300 to 3,100 lb.";
-      } else if (takeoffOutside) {
+      } else if (distOutside) {
         result.takeoff.reason = "Takeoff chart covers sea level to 8,000 ft pressure altitude and 0 to 40°C.";
       } else {
         const ground = sampleWeight(input.weightLb, (weight) => sampleGrid(
-          TAKEOFF[weight], DIST_ALTS, DIST_TEMPS, distChartAlt, input.oatC, (cell) => cell[0]
+          TAKEOFF[weight], DIST_ALTS, DIST_TEMPS, distChartAlt, distChartTemp, (cell) => cell[0]
         ).value);
         const total = sampleWeight(input.weightLb, (weight) => sampleGrid(
-          TAKEOFF[weight], DIST_ALTS, DIST_TEMPS, distChartAlt, input.oatC, (cell) => cell[1]
+          TAKEOFF[weight], DIST_ALTS, DIST_TEMPS, distChartAlt, distChartTemp, (cell) => cell[1]
         ).value);
         const liftoff = sampleWeight(input.weightLb, (weight) => TAKEOFF_SPEED[weight][0]);
         const over50 = sampleWeight(input.weightLb, (weight) => TAKEOFF_SPEED[weight][1]);
         const corrected = correctDistance(ground.value, total.value, wind.factor, input.surface, "takeoff", false, wind.tailwindLimit);
         const takeoffNotes = corrected.notes.slice();
+        if (belowDistTemp) takeoffNotes.unshift(coldDistNote);
         if (belowSeaLevel) takeoffNotes.unshift(seaLevelNote);
         result.takeoff = {
           available: true,
@@ -536,17 +543,17 @@
         };
       }
 
-      const climbOutside = climbChartAlt == null
-        || input.oatC < CLIMB_TEMPS[0] || input.oatC > CLIMB_TEMPS[CLIMB_TEMPS.length - 1];
+      const climbOutside = climbChartAlt == null || climbChartTemp == null;
       if (climbOutside) {
         result.climb.reason = "Climb chart covers sea level to 20,000 ft pressure altitude and -20 to 40°C.";
       } else {
-        const rateValue = climbRate(climbChartAlt, input.oatC);
-        const speedValue = climbSpeed(climbChartAlt, input.oatC);
+        const rateValue = climbRate(climbChartAlt, climbChartTemp);
+        const speedValue = climbSpeed(climbChartAlt, climbChartTemp);
         const climbNotes = [
           "Published at 3,100 lb" + (input.weightLb != null && input.weightLb !== 3100 ? ". Not adjusted for the entered weight." : "."),
           "Flaps up, 2400 RPM, 32 in Hg, mixture 24 GPH, cowl flaps open."
         ];
+        if (belowClimbTemp) climbNotes.unshift(coldClimbNote);
         if (belowSeaLevel) climbNotes.unshift(seaLevelNote);
         if (rateValue == null) {
           result.climb = {
@@ -567,13 +574,14 @@
         }
       }
 
-      if (takeoffOutside) {
+      if (distOutside) {
         result.landing.reason = "Landing chart covers sea level to 8,000 ft pressure altitude and 0 to 40°C.";
       } else {
-        const ground = sampleGrid(LANDING, DIST_ALTS, DIST_TEMPS, distChartAlt, input.oatC, (cell) => cell[0]);
-        const total = sampleGrid(LANDING, DIST_ALTS, DIST_TEMPS, distChartAlt, input.oatC, (cell) => cell[1]);
+        const ground = sampleGrid(LANDING, DIST_ALTS, DIST_TEMPS, distChartAlt, distChartTemp, (cell) => cell[0]);
+        const total = sampleGrid(LANDING, DIST_ALTS, DIST_TEMPS, distChartAlt, distChartTemp, (cell) => cell[1]);
         const corrected = correctDistance(ground.value, total.value, wind.factor, input.surface, "landing", input.flapsUp, wind.tailwindLimit);
         const notes = corrected.notes.slice();
+        if (belowDistTemp) notes.unshift(coldDistNote);
         if (belowSeaLevel) notes.unshift(seaLevelNote);
         notes.unshift("Published at 2,950 lb" + (input.weightLb != null && input.weightLb !== 2950 ? ". Not adjusted for the entered weight." : "."));
         if (!input.flapsUp) notes.push("Flaps full, 60 KIAS at 50 ft.");
@@ -806,8 +814,24 @@
 
       result = performance(Object.assign({}, base, { oatC: -5 }));
       expect("climb interp", result.climb.fpm, 1115);
-      expect("to blocked", result.takeoff.available, false);
-      expect("landing blocked cold", result.landing.available, false);
+      expect("cold to available", result.takeoff.available, true);
+      expect("cold to ground", result.takeoff.ground, 700);
+      expect("cold to total", result.takeoff.total, 1255);
+      expect("cold ld available", result.landing.available, true);
+      expect("cold ld ground", result.landing.ground, 560);
+      expect("cold ld total", result.landing.total, 1300);
+      expect("cold note", result.takeoff.notes[0], "Temperature is below 0°C; distances use the 0°C chart line.");
+
+      /* KDSM-like: cold OAT with PA still in chart range. */
+      result = performance(Object.assign({}, base, {
+        elevationFt: 942, altimeterInHg: 30.52, oatC: -2.8, windSpeedKt: 0
+      }));
+      expect("kdsm pa", result.pressureAlt, 342);
+      expect("kdsm to available", result.takeoff.available, true);
+      expect("kdsm to ground", result.takeoff.ground, 715);
+      expect("kdsm to total", result.takeoff.total, 1275);
+      expect("kdsm ld ground", result.landing.ground, 565);
+      expect("kdsm ld total", result.landing.total, 1290);
 
       result = performance(Object.assign({}, base, { windDir: 90, windSpeedKt: 10 }));
       expect("xwind dist", result.takeoff.ground, 700);
